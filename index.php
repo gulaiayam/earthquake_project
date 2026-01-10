@@ -1,10 +1,6 @@
 <?php
 include "functions.php";
 
-        if(isset($_POST['exe'])){
-            $value = $_POST["area"];
-        }
-
 ?>
 
 <!DOCTYPE html>
@@ -12,33 +8,8 @@ include "functions.php";
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-
-    <form action="" method="post">
-        <textarea name="area" id=""><?php echo $value;?></textarea>
-        <br>
-        <input type="submit" name ="exe" value="Execute">
-        <input type="submit" name ="refresh" value="Reset">
-        
-    </form>
-
-    <?php
-        if(isset($_POST['exe'])){
-            exe($_POST['area']);
-        }
-        if(isset($_POST['exe'])){
-            show_table();
-        }
-        if(isset($_POST['refresh'])){
-            header("Refresh:0");
-        }
-    ?>
-</body>
-</html>
-
-<style>
+    <title>Deteksi Debu Gunung Berapa</title>
+    <style>
     table, th, tr,td {
         border: 1px solid black;
         border-collapse: collapse;
@@ -52,3 +23,35 @@ include "functions.php";
         font-size: 20px;
     }
 </style>
+</head>
+<body>
+    <h1>Input Kalimat Bahasa Indoenesia Deteksi Debu Gunung Berapa</h1>
+    <form action="" method="post">
+        <textarea name="kalimat" autofocus><?= isset($_POST['kalimat']) ? $_POST['kalimat'] : "" ?></textarea>
+        <br> <br>
+        <input type="submit" name ="scanner" value="Scanner">
+        <input type="submit" name ="token" value="Token">
+        <input type="submit" name ="parsing" value="Parsing">
+        <input type="submit" name ="bersih" value="Bersih">
+        <br>
+    </form>
+    
+    <?php
+    if(isset($_POST['scanner'])){
+        scanner_view($_POST['kalimat']);
+    }
+
+    if(isset($_POST['token'])){
+        token_view($_POST['kalimat']);
+    }
+
+    if(isset($_POST['parsing'])){
+        parsing_view($_POST['kalimat']);
+    }
+
+    if(isset($_POST['bersih'])){
+        header("Refresh:0");
+    }
+    ?>
+</body>
+</html>
