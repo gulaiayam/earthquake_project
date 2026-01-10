@@ -2,7 +2,7 @@
 include "conn.php";
 
 $katatanya = array("berapa", "dimana", "kapan", "tampilkan");
-$kata_tidak_diabaikan = array("area", "info", "terjadi", "posisi", "pada", "gunung", "terkini", "bumi", "di", "dari", "yang", "antara", "berlokasi", "pada","vulkanik", "abu");
+$kata_tidak_diabaikan = array("area", "info", "terjadi", "posisi", "pada", "gunung", "terkini", "pergerakan", "di", "dari", "yang", "antara", "waktu", "pada","vulkanik", "abu");
 $operator = ["=",">","<","LIKE"];
 $mapAtribut = [
     "seluruh" => "*",
@@ -111,6 +111,7 @@ function parsing_view($text){
             $is_attribute = false;
             $db_field = "";
             
+            // Cek 2 kata
             if($i + 1 < $count){
                 $two_words = $word . " " . $words[$i+1];
                 if(array_key_exists($two_words, $mapAtribut)){
@@ -119,6 +120,7 @@ function parsing_view($text){
                     $skip_logic = true; 
                 }
             }
+            // Cek 1 kata
             if(!$is_attribute && array_key_exists($word, $mapAtribut)){
                 $is_attribute = true;
                 $db_field = $mapAtribut[$word];
@@ -135,7 +137,12 @@ function parsing_view($text){
             else if($is_rule_1){
                 if($fase == "TARGET"){
                     if($word == "seluruh"){ $select_cols[] = "*"; }
-                    elseif($is_attribute){ if(!in_array("*", $select_cols)) $select_cols[] = $db_field; }
+                    elseif($is_attribute){ 
+                        // Mencegah duplikasi kolom
+                        if(!in_array("*", $select_cols) && !in_array($db_field, $select_cols)) {
+                            $select_cols[] = $db_field; 
+                        }
+                    }
                     elseif(in_array($word, $kata_hubung)){ $fase = "KONDISI"; }
                 }
                 elseif($fase == "KONDISI"){
@@ -150,14 +157,24 @@ function parsing_view($text){
                 }
             }
         }
-
         echo "<tr><td>$i</td><td>$word</td><td>$token</td><td>$keterangan_parsing</td></tr>";
     }
     echo "</table><br>";
 
     if($is_rule_1){
-        $str_select = empty($select_cols) ? "*" : implode(", ", $select_cols);
+        // --- LOGIKA QUERY SELECT DINAMIS ---
+        $str_select = "";
         
+        if(empty($select_cols) || in_array("*", $select_cols)){
+            $str_select = "*";
+        } else {
+            if(!in_array("DataID", $select_cols)){
+                array_unshift($select_cols, "DataID");
+            }
+            $str_select = implode(", ", $select_cols);
+        }
+        
+        // Build Where Clause
         $str_where = "";
         if(!empty($where_conds)){
             $arr_conds = [];
@@ -167,7 +184,8 @@ function parsing_view($text){
             $str_where = "WHERE " . implode(" AND ", $arr_conds);
         }
 
-        $sql = "SELECT * FROM sigmet_va $str_where"; // Force SELECT * agar data lengkap untuk narasi
+        // Query final menggunakan kolom spesifik yang diminta user
+        $sql = "SELECT $str_select FROM sigmet_va $str_where";
 
         echo "<b>Query: </b> $sql <br><br>";
         
@@ -179,45 +197,82 @@ function parsing_view($text){
                 if(mysqli_num_rows($q) > 0){
                     while($row = mysqli_fetch_assoc($q)){
                         
-                        $raw_pergerakan = $row['PergerakanAbu'];
-                        $arah_indo = "Tidak diketahui";
-                        $kecepatan = "Tidak diketahui";
-
-                        // Regex untuk mengambil Kode Arah (Huruf Besar) dan Angka (Speed)
-                        // Mencari pola: Huruf Kapital (N/SE/dll) diikuti spasi lalu Angka
-                        if(preg_match('/Arah\s+([A-Z]+)\s+(\d+)\s+knot/i', $raw_pergerakan, $matches)){
-                            $kode_arah = strtoupper($matches[1]);
-                            $nilai_speed = $matches[2];           
-                            
-                            // Translate Arah
-                            if(isset($arah_map[$kode_arah])){
-                                $arah_indo = $arah_map[$kode_arah];
-                            } else {
-                                $arah_indo = $kode_arah;
-                            }
-                            $kecepatan = $nilai_speed . " knot";
-                        } else {
-                            $arah_indo = $raw_pergerakan;
-                            $kecepatan = "-";
-                        }
-
                         echo "<div style='border:1px solid #ccc; padding:15px; margin-bottom:10px; background:#f9f9f9; line-height: 1.6;'>";
                         
-                        echo "ID :".$row["DataID"]. "<br>";
-                        echo "Data ini dipublikasikan pada tanggal : " . $row['Transmisi_WIB'] . "<br>";
-                        echo "Data ini valid pada " . $row['ValidMulai_WIB'] . "<br>";
-                        echo "Data ini valid sampai " . $row['ValidAkhir_WIB'] . "<br>";
-                        echo "Data ini dipublikasikan pada stasiun meteorologi yang terletak di " . $row['AreaPenerbangan'] . "<br>";
-                        echo "Gunung yang mengeluarkan abu vulkanik adalah Gunung " . $row['NamaGunung'] . "<br>";
-                        echo "Posisi gunung ini berada di koordinat " . $row['PosisiGunung'] . "<br>";
-                        echo "Abu vulkanik diobservasikan pada pukul " . $row['ObsWaktu'] . "<br>";
-                        echo "Area abu vulkanik ini terletak pada titik-titik koordinat berikut: " . $row['AreaAbu'] . "<br>";
-                        echo "Abu vulkanik ini memiliki ketinggian " . $row['Ketinggian_Meter'] . " meter dari permukaan bumi<br>";
-                        echo "Perkiraan abu vulkanik ini akan bergerak ke arah " . $arah_indo . "<br>";
-                        if($kecepatan != "-"){
-                            echo "Kecepatan abu vulkanik sebesar " . $kecepatan . "<br>";
+                        // ID Selalu Ditampilkan (karena dipaksa select di atas)
+                        if(isset($row['DataID'])) {
+                            echo "<b>ID : " . $row["DataID"] . "</b><br>";
                         }
-                        echo "Perkiraan intensitas abu vulkanik adalah: " . $row['IntensitasAbu'] . "<br>";
+
+                        // --- TAMPILAN DINAMIS MENGGUNAKAN ISSET() ---
+                        // Hanya tampil jika kolom tersebut ada di hasil SELECT query
+
+                        if(isset($row['Transmisi_WIB'])){
+                            echo "Data ini dipublikasikan pada tanggal : " . $row['Transmisi_WIB'] . "<br>";
+                        }
+
+                        if(isset($row['ValidMulai_WIB'])){
+                            echo "Data ini valid pada " . $row['ValidMulai_WIB'] . "<br>";
+                        }
+
+                        if(isset($row['ValidAkhir_WIB'])){
+                            echo "Data ini valid sampai " . $row['ValidAkhir_WIB'] . "<br>";
+                        }
+
+                        if(isset($row['AreaPenerbangan'])){
+                            echo "Data ini dipublikasikan pada stasiun meteorologi yang terletak di " . $row['AreaPenerbangan'] . "<br>";
+                        }
+
+                        if(isset($row['NamaGunung'])){
+                            echo "Gunung yang mengeluarkan abu vulkanik adalah Gunung " . $row['NamaGunung'] . "<br>";
+                        }
+
+                        if(isset($row['PosisiGunung'])){
+                            echo "Posisi gunung ini berada di koordinat " . $row['PosisiGunung'] . "<br>";
+                        }
+
+                        if(isset($row['ObsWaktu'])){
+                            echo "Abu vulkanik diobservasikan pada pukul " . $row['ObsWaktu'] . "<br>";
+                        }
+
+                        if(isset($row['AreaAbu'])){
+                            echo "Area abu vulkanik ini terletak pada titik-titik koordinat berikut: " . $row['AreaAbu'] . "<br>";
+                        }
+
+                        if(isset($row['Ketinggian_Meter'])){
+                            echo "Abu vulkanik ini memiliki ketinggian " . $row['Ketinggian_Meter'] . " meter dari permukaan bumi<br>";
+                        }
+
+                        // Khusus Pergerakan Abu (Ada logika Regex)
+                        if(isset($row['PergerakanAbu'])){
+                            $raw_pergerakan = $row['PergerakanAbu'];
+                            $arah_indo = "Tidak diketahui";
+                            $kecepatan = "-";
+
+                            if(preg_match('/Arah\s+([A-Z]+)\s+(\d+)\s+knot/i', $raw_pergerakan, $matches)){
+                                $kode_arah = strtoupper($matches[1]);
+                                $nilai_speed = $matches[2];           
+                                
+                                if(isset($arah_map[$kode_arah])){
+                                    $arah_indo = $arah_map[$kode_arah];
+                                } else {
+                                    $arah_indo = $kode_arah;
+                                }
+                                $kecepatan = $nilai_speed . " knot";
+                            } else {
+                                $arah_indo = $raw_pergerakan;
+                            }
+
+                            echo "Perkiraan abu vulkanik ini akan bergerak ke arah " . $arah_indo . "<br>";
+                            if($kecepatan != "-"){
+                                echo "Kecepatan abu vulkanik sebesar " . $kecepatan . "<br>";
+                            }
+                        }
+
+                        if(isset($row['IntensitasAbu'])){
+                            echo "Perkiraan intensitas abu vulkanik adalah: " . $row['IntensitasAbu'] . "<br>";
+                        }
+
                         echo "</div>";
                     }
                 } else {
