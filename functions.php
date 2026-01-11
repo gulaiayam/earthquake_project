@@ -31,7 +31,7 @@ $arah_map = [
     "S"  => "Selatan",
     "W"  => "Barat"
 ];
-$kata_hubung = ["yang", "dengan", "untuk", "dimana"];
+$kata_hubung = ["yang", "dengan", "untuk", "dimana",'pada'];
 
 function scanner($text){
     $text = strtolower($text);
