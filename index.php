@@ -8,7 +8,7 @@ include "functions.php";
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deteksi Debu Gunung Berapa</title>
+    <title>Deteksi Debu Gunung Berapi</title>
     <style>
     table, th, tr,td {
         border: 1px solid black;
@@ -25,7 +25,7 @@ include "functions.php";
 </style>
 </head>
 <body>
-    <h1>Input Kalimat Bahasa Indoenesia Deteksi Debu Gunung Berapa</h1>
+    <h1>Input Kalimat Bahasa Indoenesia Deteksi Debu Gunung Berapi</h1>
     <form action="" method="post">
         <textarea name="kalimat" autofocus><?= isset($_POST['kalimat']) ? $_POST['kalimat'] : "" ?></textarea>
         <br> <br>
