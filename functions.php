@@ -31,7 +31,7 @@ $arah_map = [
     "S"  => "Selatan",
     "W"  => "Barat"
 ];
-$kata_hubung = ["yang", "dengan", "untuk", "dimana",'pada'];
+$kata_hubung = ["yang", "dengan", "untuk", "dimana", "pada", "dari", "sampai"];
 
 function scanner($text){
     $text = strtolower($text);
@@ -60,7 +60,7 @@ function cekKataTidakDiabaikan($kata){
 
     if(in_array($kata, $katatanya)) return 1;
     if(in_array($kata, $kata_tidak_diabaikan)) return 1;
-
+    if(preg_match("/^\d{4}-\d{2}-\d{2}$/", $kata)) return 1;
     return 0;
 }
 
@@ -82,33 +82,43 @@ function token_view($text){
     echo "</table>";
 }
 
-function solve_tampilkan($select_cols, $where_conds){
+function solve_tampilkan($select_cols, $where_conds, $date_range){
     $str_select = "";
 
-    // Jika User minta "seluruh" -> SELECT *
+    // 1. SELECT
     if(in_array("*", $select_cols)){
         $str_select = "*";
-    }
-    // Jika User minta atribut spesifik -> SELECT col1, col2
-    elseif(!empty($select_cols)){
-        // Pastikan ID ikut agar tampilan rapi
-        if(!in_array("DataID", $select_cols)){
-            array_unshift($select_cols, "DataID");
-        }
+    } elseif(!empty($select_cols)){
+        if(!in_array("DataID", $select_cols)) array_unshift($select_cols, "DataID");
         $str_select = implode(", ", $select_cols);
-    }
-    // Error jika kosong
-    else {
-        return ["status" => "error", "msg" => "Tidak ada atribut yang dikenali untuk ditampilkan."];
+    } else {
+        return ["status" => "error", "msg" => "Tidak ada atribut yang dikenali."];
     }
 
-    // Build Where
-    $str_where = "";
+    // 2. WHERE STANDARD
+    $arr_conds = [];
     if(!empty($where_conds)){
-        $arr_conds = [];
         foreach($where_conds as $cond){
+            // Jika kolom adalah Transmisi_WIB dan kita punya range, skip (prioritas range)
+            if($cond['col'] == 'Transmisi_WIB' && !empty($date_range)) continue;
+            
             $arr_conds[] = $cond['col'] . " LIKE '%" . $cond['val'] . "%'";
         }
+    }
+
+    // Menggunakan
+    if(!empty($date_range)){
+        if(isset($date_range['start']) && isset($date_range['end'])){
+            $start = $date_range['start'];
+            $end = $date_range['end'];
+            // Menggunakan DATE() agar jam diabaikan (YYYY-MM-DD)
+            $arr_conds[] = "DATE(Transmisi_WIB) >= '$start'";
+            $arr_conds[] = "DATE(Transmisi_WIB) <= '$end'";
+        }
+    }
+
+    $str_where = "";
+    if(!empty($arr_conds)){
         $str_where = "WHERE " . implode(" AND ", $arr_conds);
     }
 
@@ -152,9 +162,11 @@ function parsing_view($text){
     // Variable State
     $select_cols = [];
     $where_conds = [];
+    $date_range  = [];
     $rule_type = ""; 
     $fase = "";    
     $skip_logic = false;
+    $context_date = "";
 
     // TABEL PARSING
     echo "<h3>Tabel Parsing</h3>";
@@ -207,6 +219,15 @@ function parsing_view($text){
                 // Cek Transisi ke WHERE
                 if(in_array($word, $kata_hubung)){
                     $fase = "KONDISI";
+
+                    // Logic Khusus "Dari" dan "Sampai"
+                    if($word == "dari"){
+                        $context_date = "start";
+                    } elseif($word == "sampai"){
+                        $context_date = "end";
+                    } else {
+                        $context_date = ""; // Reset jika kata hubung lain
+                    }
                 }
 
                 if($fase == "TARGET"){
@@ -219,12 +240,32 @@ function parsing_view($text){
                     }
                 }
                 elseif($fase == "KONDISI"){
-                    if($is_attribute){
-                        // Mulai kondisi baru
-                        $where_conds[] = ["col" => $db_field, "val" => ""];
+                    
+                    // Cek Apakah ini Tanggal (Format YYYY-MM-DD)
+                    if(preg_match("/^\d{4}-\d{2}-\d{2}$/", $word)){
+                        if($context_date == "start"){
+                            $date_range['start'] = $word;
+                        } elseif($context_date == "end"){
+                            $date_range['end'] = $word;
+                        } else {
+                            // Jika tanggal muncul tanpa "dari/sampai", anggap sebagai nilai kondisi biasa
+                            // Default ke Transmisi_WIB jika belum ada kolom
+                             if(empty($where_conds) || $where_conds[count($where_conds)-1]['val'] != ""){
+                                $where_conds[] = ["col" => "Transmisi_WIB", "val" => $word];
+                            } else {
+                                // Append ke val terakhir
+                                $idx = count($where_conds) - 1;
+                                $where_conds[$idx]["val"] = $word;
+                            }
+                        }
                     }
+                    // 2. Jika Atribut Biasa
+                    elseif($is_attribute){
+                        $where_conds[] = ["col" => $db_field, "val" => ""];
+                        $context_date = "";
+                    }
+                    // 3. Jika Data Biasa (Bukan tanggal, bukan atribut)
                     elseif($token == 0){
-                        // Isi value kondisi
                         if(!empty($where_conds)){
                             $idx = count($where_conds) - 1;
                             $old = $where_conds[$idx]["val"];
@@ -242,7 +283,7 @@ function parsing_view($text){
     $result = ["status" => "none"];
 
     if($rule_type == "tampilkan"){
-        $result = solve_tampilkan($select_cols, $where_conds);
+        $result = solve_tampilkan($select_cols, $where_conds, $date_range);
     } 
     elseif($rule_type == "dimana"){
     // VALIDASI
