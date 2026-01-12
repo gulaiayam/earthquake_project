@@ -1,8 +1,8 @@
 <?php
 include "conn.php";
 
-$katatanya = array("berapa", "dimana", "kapan", "tampilkan");
-$kata_tidak_diabaikan = array("lokasi","area", "info", "terjadi", "posisi", "pada", "gunung", "terkini", "pergerakan", "di", "dari", "yang", "antara", "waktu", "pada","vulkanik", "abu");
+$katatanya = array("berapa", "dimana", "kapan");
+$kata_tidak_diabaikan = array("lokasi","area", "info", "terjadi", "posisi", "pada", "gunung", "terkini", "pergerakan", "di", "dari", "yang", "antara", "waktu", "pada","vulkanik", "abu","tampilkan", "seluruh");
 $operator = ["=",">","<","LIKE"];
 $mapAtribut = [
     "seluruh" => "*",
@@ -42,7 +42,7 @@ function scanner($text){
 function scanner_view($text){
     $words = scanner($text);
 
-    echo "<h3>Hasil Scanner</h3>";
+    echo "<h3>Tabel</h3>";
     echo "<table>
             <tr><th>Index</th><th>Kata</th></tr>";
 
@@ -67,7 +67,7 @@ function cekKataTidakDiabaikan($kata){
 function token_view($text){
     $words = scanner($text);
 
-    echo "<h3>Hasil Token</h3>";
+    echo "<h3>Tabel</h3>";
     echo "<table>
             <tr><th>Index</th><th>Kata</th><th>Token</th></tr>";
 
@@ -249,16 +249,16 @@ function solve_tampilkan($select_cols, $where_conds, $date_range){
     return ["status" => "success", "sql" => $sql];
 }
 
-function solve_dimana($select_cols, $where_conds){
-    // Jika tidak ada target
+function solve_kata_tanya($rule_type, $select_cols, $where_conds){
+    // Jika tidak ada atribut target
     if(empty($select_cols)){
         return [
             "status" => "error",
-            "msg" => "Setelah kata 'dimana' harus ada atribut yang dikenali."
+            "msg" => "Setelah kata '$rule_type' harus ada atribut yang dikenali."
         ];
     }
 
-    // Ambil atribut pertama
+    // Ambil atribut pertama sebagai jawaban utama
     $str_select = $select_cols[0];
 
     // Build WHERE
@@ -274,6 +274,7 @@ function solve_dimana($select_cols, $where_conds){
     $sql = "SELECT $str_select FROM sigmet_va $str_where";
     return ["status" => "success", "sql" => $sql];
 }
+
 
 function parsing_view($text){
     global $con, $mapAtribut, $arah_map, $kata_hubung;
@@ -291,7 +292,7 @@ function parsing_view($text){
     $context_date = "";
 
     // TABEL PARSING
-    echo "<h3>Tabel Parsing</h3>";
+    echo "<h3>Tabel</h3>";
     echo "<table border='1'>
             <tr><th>Index</th><th>Kata</th><th>Token</th><th>Parsing</th></tr>";
 
@@ -332,6 +333,16 @@ function parsing_view($text){
                     $rule_type = "dimana";
                     $fase = "TARGET";
                     $keterangan = "aturan(2)";
+                }
+                elseif($word == "berapa"){
+                    $rule_type = "berapa";
+                    $fase = "TARGET";
+                    $keterangan = "aturan(3)";
+                }
+                elseif($word == "kapan"){
+                    $rule_type = "kapan";
+                    $fase = "TARGET";
+                    $keterangan = "aturan(4)";
                 }
             }
             
@@ -407,13 +418,8 @@ function parsing_view($text){
     if($rule_type == "tampilkan"){
         $result = solve_tampilkan($select_cols, $where_conds, $date_range);
     } 
-    elseif($rule_type == "dimana"){
-    // VALIDASI
-    if(empty($select_cols)){
-        echo "<p style='color:red;'><b>Error:</b> Tidak ada atribut yang dikenali.</p>";
-        return;
-    }
-    $result = solve_dimana($select_cols, $where_conds);
+    elseif(in_array($rule_type, ["dimana","berapa","kapan"])){
+        $result = solve_kata_tanya($rule_type, $select_cols, $where_conds);
     }
 
     // Cek Hasil
@@ -422,6 +428,7 @@ function parsing_view($text){
         return;
     }
     elseif($result['status'] == "none"){
+        echo "<p style='color:red;'><b>Error: TIdak ada aturan yang ditamukan </b></p>";
         return;
     }
 
