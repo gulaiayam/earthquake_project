@@ -6,31 +6,31 @@ $kata_tidak_diabaikan = array("lokasi","area", "info", "terjadi", "posisi", "pad
 $operator = ["=",">","<","LIKE"];
 $mapAtribut = [
     "seluruh" => "*",
-    "nama gunung" => "NamaGunung",
-    "lokasi" => "NamaGunung",
-    "lokasi gunung" => "NamaGunung", 
-    "posisi" => "PosisiGunung",
-    "posisi gunung" => "PosisiGunung",
-    "area abu" => "AreaAbu",
-    "ketinggian abu" => "Ketinggian_Meter",
-    "ketinggian awan" => "Ketinggian_Meter",
+    "nama gunung" => "nama_gunung",
+    "lokasi" => "nama_gunung",
+    "lokasi gunung" => "nama_gunung", 
+    "posisi" => "posisi_gunung",
+    "posisi gunung" => "posisi_gunung",
+    "area abu" => "area_abu",
+    "ketinggian abu" => "ketinggian_meter",
+    "ketinggian awan" => "ketinggian_meter",
     "pergerakan abu" => "PergerakanAbu",
-    "intensitas abu" => "IntensitasAbu",
-    "waktu observasi" => "ObsWaktu",
-    "tanggal" => "Transmisi_WIB",
-    "waktu dikeluarkan" => "Transmisi_WIB",
-    "waktu mulai" => "ValidMulai_WIB"
+    "intensitas abu" => "intensitas_abu",
+    "waktu observasi" => "orb_waktu",
+    "tanggal" => "transmisi_wib",
+    "waktu dikeluarkan" => "transmisi_wib",
+    "waktu mulai" => "valid_mulai_wib"
 ];
-$arah_map = [
-    "N"  => "Utara",
-    "NW" => "Barat Laut",
-    "NE" => "Timur Laut",
-    "E"  => "Timur",
-    "SE" => "Tenggara",
-    "SW" => "Barat Daya",
-    "S"  => "Selatan",
-    "W"  => "Barat"
-];
+// $arah_map = [
+//     "N"  => "Utara",    
+//     "NW" => "Barat Laut",
+//     "NE" => "Timur Laut",
+//     "E"  => "Timur",
+//     "SE" => "Tenggara",
+//     "SW" => "Barat Daya",
+//     "S"  => "Selatan",
+//     "W"  => "Barat"
+// ];
 $kata_hubung = ["yang", "dengan", "untuk", "dimana", "pada", "dari", "sampai"];
 
 function scanner($text){
@@ -73,7 +73,7 @@ function token_view($text){
 
     foreach($words as $i => $word){
         $token = cekKataTidakDiabaikan($word);
-        echo "<tr>
+        echo "<tr>                              
                 <td>".($i+1)."</td>
                 <td>$word</td>
                 <td>$token</td>
@@ -82,33 +82,29 @@ function token_view($text){
     echo "</table>";
 }
 
-
-// Input: S0816 atau E12330
-// Output: -8.2667 atau 123.5
 function parse_coordinate($coord_str){
     $coord_str = trim($coord_str);
-    if(strlen($coord_str) < 5) return 0; // Invalid
+    
+    // Validasi format: Harus diawali N/S/E/W diikuti angka
+    if(!preg_match("/^[NSEW]\d+$/", $coord_str)) return 0;
 
-    $dir = strtoupper(substr($coord_str, 0, 1)); // N, S, E, W
-    $val_str = substr($coord_str, 1); // 0816
-    
-    // Format SIGMET biasanya DDMM (Degrees Minutes)
-    // S0816 -> 08 Derajat 16 Menit
-    // E12330 -> 123 Derajat 30 Menit
-    
-    // Logic split DD dan MM agak tricky karena panjang digit beda (Lat 4 digit, Long 5 digit)
+    $dir = strtoupper(substr($coord_str, 0, 1)); 
+    $val_str = substr($coord_str, 1); 
+
     if($dir == 'N' || $dir == 'S'){
-        // Latitude (Format DDMM, misal 0816)
+        if(strlen($val_str) != 4) return 0;
         $deg = substr($val_str, 0, 2);
         $min = substr($val_str, 2, 2);
     } else {
-        // Longitude (Format DDDMM, misal 12330)
+        if(strlen($val_str) != 5) return 0;
         $deg = substr($val_str, 0, 3);
         $min = substr($val_str, 3, 2);
     }
     
+    // Konversi Derajat Menit ke Desimal
     $decimal = floatval($deg) + (floatval($min) / 60);
     
+    // Jika South atau West, nilai negatif
     if($dir == 'S' || $dir == 'W'){
         $decimal = $decimal * -1;
     }
@@ -127,40 +123,44 @@ function visualisasi_map($id, $posisi_gunung_raw = null, $area_abu_raw = null){
     $lon_gunung = 0;
     $js_polygon = "[]";
 
-    // 1. Parse Posisi Gunung (jika ada)
+    // Pola Regex: Mencari pasangan (N/S + 4 digit) spasi (E/W + 5 digit)
+    // Ini akan mengabaikan kata "WI", "-", atau teks sampah lainnya.
+    $pattern = "/([NS]\d{4})\s+([EW]\d{5})/";
+
+    // Parse Posisi Gunung (Ambil match pertama saja)
     if(!empty($posisi_gunung_raw)){
-        $parts = preg_split("/\s+/", trim($posisi_gunung_raw));
-        if(count($parts) >= 2){
-            $lat_gunung = parse_coordinate($parts[0]);
-            $lon_gunung = parse_coordinate($parts[1]);
+        if(preg_match($pattern, $posisi_gunung_raw, $matches)){
+            // matches[1] adalah Lat, matches[2] adalah Lon
+            $lat_gunung = parse_coordinate($matches[1]);
+            $lon_gunung = parse_coordinate($matches[2]);
         }
     }
 
-    // 2. Parse Area Abu (jika ada)
+    // parse Area Abu (Ambil semua match untuk membentuk Polygon)
+    $polygon_coords = [];
     if(!empty($area_abu_raw)){
-        $polygon_coords = [];
-        $raw_poly = preg_split("/\s*-\s*/", trim($area_abu_raw));
-
-        foreach($raw_poly as $point){
-            $p = preg_split("/\s+/", trim($point));
-            if(count($p) >= 2){
-                $lat = parse_coordinate($p[0]);
-                $lon = parse_coordinate($p[1]);
+        // preg_match_all akan mencari SEMUA pasangan koordinat dalam string
+        if(preg_match_all($pattern, $area_abu_raw, $matches, PREG_SET_ORDER)){
+            foreach($matches as $m){
+                $lat = parse_coordinate($m[1]);
+                $lon = parse_coordinate($m[2]);
                 $polygon_coords[] = "[$lat, $lon]";
             }
         }
         $js_polygon = "[" . implode(",", $polygon_coords) . "]";
     }
 
-    // Titik tengah peta:
-    // Jika ada posisi → pakai posisi
-    // Jika tidak ada → pakai titik pertama polygon
-    if(empty($posisi_gunung_raw) && !empty($area_abu_raw) && !empty($polygon_coords)){
-        $lat_gunung = parse_coordinate(preg_split("/\s+/", trim($raw_poly[0]))[0]);
-        $lon_gunung = parse_coordinate(preg_split("/\s+/", trim($raw_poly[0]))[1]);
+    // Titik tengah peta default jika posisi gunung tidak ada tapi area abu ada
+    if($lat_gunung == 0 && $lon_gunung == 0 && !empty($polygon_coords)){
+        // Ambil titik pertama dari polygon sebagai center
+        // Format string "[$lat, $lon]", kita bersihkan kurung siku
+        $first_point = str_replace(['[',']'], '', $polygon_coords[0]);
+        $fp = explode(',', $first_point);
+        $lat_gunung = $fp[0];
+        $lon_gunung = $fp[1];
     }
 
-    // 3. Generate HTML & JS
+    // enerate HTML & JS (Sama seperti sebelumnya)
     $map_id = "map_" . $id;
     $map_var = "mapVar_" . $id;
 
@@ -212,7 +212,7 @@ function solve_tampilkan($select_cols, $where_conds, $date_range){
     if(in_array("*", $select_cols)){
         $str_select = "*";
     } elseif(!empty($select_cols)){
-        if(!in_array("DataID", $select_cols)) array_unshift($select_cols, "DataID");
+        if(!in_array("id", $select_cols)) array_unshift($select_cols, "id");
         $str_select = implode(", ", $select_cols);
     } else {
         return ["status" => "error", "msg" => "Tidak ada atribut yang dikenali."];
@@ -222,8 +222,8 @@ function solve_tampilkan($select_cols, $where_conds, $date_range){
     $arr_conds = [];
     if(!empty($where_conds)){
         foreach($where_conds as $cond){
-            // Jika kolom adalah Transmisi_WIB dan kita punya range, skip (prioritas range)
-            if($cond['col'] == 'Transmisi_WIB' && !empty($date_range)) continue;
+            // Jika kolom adalah transmisi_wib dan kita punya range, skip (prioritas range)
+            if($cond['col'] == 'transmisi_wib' && !empty($date_range)) continue;
             
             $arr_conds[] = $cond['col'] . " LIKE '%" . $cond['val'] . "%'";
         }
@@ -235,8 +235,8 @@ function solve_tampilkan($select_cols, $where_conds, $date_range){
             $start = $date_range['start'];
             $end = $date_range['end'];
             // Menggunakan DATE() agar jam diabaikan (YYYY-MM-DD)
-            $arr_conds[] = "DATE(Transmisi_WIB) >= '$start'";
-            $arr_conds[] = "DATE(Transmisi_WIB) <= '$end'";
+            $arr_conds[] = "DATE(transmisi_wib) >= '$start'";
+            $arr_conds[] = "DATE(transmisi_wib) <= '$end'";
         }
     }
 
@@ -245,7 +245,7 @@ function solve_tampilkan($select_cols, $where_conds, $date_range){
         $str_where = "WHERE " . implode(" AND ", $arr_conds);
     }
 
-    $sql = "SELECT $str_select FROM sigmet_va $str_where";
+    $sql = "SELECT $str_select FROM sigmet_data $str_where";
     return ["status" => "success", "sql" => $sql];
 }
 
@@ -271,7 +271,7 @@ function solve_kata_tanya($rule_type, $select_cols, $where_conds){
         $str_where = "WHERE " . implode(" AND ", $arr_conds);
     }
 
-    $sql = "SELECT $str_select FROM sigmet_va $str_where";
+    $sql = "SELECT $str_select FROM sigmet_data $str_where";
     return ["status" => "success", "sql" => $sql];
 }
 
@@ -374,7 +374,7 @@ function parsing_view($text){
                 }
                 elseif($fase == "KONDISI"){
                     
-                    // Cek Apakah ini Tanggal (Format YYYY-MM-DD)
+                    // Cek Apakah ini Tanggal (Format YYYY-MM-DD)   
                     if(preg_match("/^\d{4}-\d{2}-\d{2}$/", $word)){
                         if($context_date == "start"){
                             $date_range['start'] = $word;
@@ -382,9 +382,9 @@ function parsing_view($text){
                             $date_range['end'] = $word;
                         } else {
                             // Jika tanggal muncul tanpa "dari/sampai", anggap sebagai nilai kondisi biasa
-                            // Default ke Transmisi_WIB jika belum ada kolom
+                            // Default ke transmisi_wib jika belum ada kolom
                              if(empty($where_conds) || $where_conds[count($where_conds)-1]['val'] != ""){
-                                $where_conds[] = ["col" => "Transmisi_WIB", "val" => $word];
+                                $where_conds[] = ["col" => "transmisi_wib", "val" => $word];
                             } else {
                                 // Append ke val terakhir
                                 $idx = count($where_conds) - 1;
@@ -428,7 +428,7 @@ function parsing_view($text){
         return;
     }
     elseif($result['status'] == "none"){
-        echo "<p style='color:red;'><b>Error: TIdak ada aturan yang ditamukan </b></p>";
+        echo "<p style='color:red;'><b>Error: TIdak ada aturan yang ditemukan </b></p>";
         return;
     }
 
@@ -445,53 +445,38 @@ function parsing_view($text){
                     echo "<div style='border:1px solid #ccc; padding:15px; margin-bottom:10px; background:#f9f9f9; line-height: 1.6;'>";
                 
                     
-                    if(isset($row['DataID'])) echo "<b>ID : " . $row["DataID"] . "</b><br>";
-                    if(isset($row['Transmisi_WIB'])) echo "Data ini dipublikasikan pada tanggal : " . $row['Transmisi_WIB'] . "<br>";
-                    if(isset($row['ValidMulai_WIB'])) echo "Data ini valid pada " . $row['ValidMulai_WIB'] . "<br>";
-                    if(isset($row['ValidAkhir_WIB'])) echo "Data ini valid sampai " . $row['ValidAkhir_WIB'] . "<br>";
-                    if(isset($row['AreaPenerbangan'])) echo "Data ini dipublikasikan pada stasiun meteorologi yang terletak di " . $row['AreaPenerbangan'] . "<br>";
-                    if(isset($row['NamaGunung'])) echo "Gunung yang mengeluarkan abu vulkanik adalah Gunung " . $row['NamaGunung'] . "<br>";
-                    if(isset($row['PosisiGunung'])) echo "Posisi gunung ini berada di koordinat " . $row['PosisiGunung'] . "<br>";
-                    if(isset($row['ObsWaktu'])) echo "Abu vulkanik diobservasikan pada pukul " . $row['ObsWaktu'] . "<br>";
-                    if(isset($row['AreaAbu'])) echo "Area abu vulkanik ini terletak pada titik-titik koordinat berikut: " . $row['AreaAbu'] . "<br>";
-                    if(isset($row['Ketinggian_Meter'])) echo "Abu vulkanik ini memiliki ketinggian " . $row['Ketinggian_Meter'] . " meter<br>";
-
-                    if(isset($row['PergerakanAbu'])){
-                        $raw = $row['PergerakanAbu'];
-                        $arah_indo = $raw;
-                        $kecepatan = "-";
-                        if(preg_match('/Arah\s+([A-Z]+)\s+(\d+)\s+knot/i', $raw, $m)){
-                            $code = strtoupper($m[1]);
-                            $arah_indo = isset($arah_map[$code]) ? $arah_map[$code] : $code;
-                            $kecepatan = $m[2] . " knot";
-                        }
-                        echo "Perkiraan abu vulkanik ini akan bergerak ke arah " . $arah_indo . "<br>";
-                        if($kecepatan != "-") echo "Kecepatan abu vulkanik sebesar " . $kecepatan . "<br>";
-                    }
-
-                    if(isset($row['IntensitasAbu'])) echo "Perkiraan intensitas abu vulkanik adalah: " . $row['IntensitasAbu'] . "<br>";
+                    if(isset($row['id'])) echo "<b>id : " . $row["id"] . "</b><br>";
+                    if(isset($row['transmisi_wib'])) echo "Data ini dipublikasikan pada tanggal : " . $row['transmisi_wib'] . "<br>";
+                    if(isset($row['valid_mulai_wib'])) echo "Data ini valid pada " . $row['valid_mulai_wib'] . "<br>";
+                    if(isset($row['valid_akhir_wib'])) echo "Data ini valid sampai " . $row['valid_akhir_wib'] . "<br>";
+                    if(isset($row['area_penerbangan'])) echo "Data ini dipublikasikan pada stasiun meteorologi yang terletak di " . $row['area_penerbangan'] . "<br>";
+                    if(isset($row['nama_gunung'])) echo "Gunung yang mengeluarkan abu vulkanik adalah Gunung " . $row['nama_gunung'] . "<br>";
+                    if(isset($row['orb_waktu'])) echo "Abu vulkanik diobservasikan pada pukul " . $row['orb_waktu'] . "<br>";
+                    if(isset($row['ketinggian_meter'])) echo "Abu vulkanik ini memiliki ketinggian " . $row['ketinggian_meter'] . " meter<br>";
+                    if(isset($row['pergerakan_abu'])) echo "Abu vulkanik ini bergerak ke arah " . $row['pergerakan_abu'] . " meter<br>";
+                    if(isset($row['intensitas_abu'])) echo "Perkiraan intensitas abu vulkanik adalah: " . $row['intensitas_abu'] . "<br>";
                     
                     // Cek jika data koordinat tersedia
-                    $need_map = in_array("PosisiGunung", $select_cols) || in_array("AreaAbu", $select_cols);
+                    $need_map = in_array("posisi_gunung", $select_cols) || in_array("area_abu", $select_cols);
 
                     if($need_map){
-                        if(!in_array("PosisiGunung", $select_cols)) $select_cols[] = "PosisiGunung";
-                        if(!in_array("AreaAbu", $select_cols)) $select_cols[] = "AreaAbu";
+                        if(!in_array("posisi_gunung", $select_cols)) $select_cols[] = "posisi_gunung";
+                        if(!in_array("area_abu", $select_cols)) $select_cols[] = "area_abu";
                     }
                     // Teks hanya tampil jika diminta user
-                    if(in_array("PosisiGunung", $select_cols) && isset($row['PosisiGunung'])){
-                        echo "Posisi gunung ini berada di koordinat " . $row['PosisiGunung'] . "<br>";
+                    if(in_array("posisi_gunung", $select_cols) && isset($row['posisi_gunung'])){
+                        echo "Posisi gunung ini berada di koordinat " . $row['posisi_gunung'] . "<br>";
                     }
 
-                    if(in_array("AreaAbu", $select_cols) && isset($row['AreaAbu'])){
-                        echo "Area abu vulkanik ini terletak pada titik-titik koordinat berikut: " . $row['AreaAbu'] . "<br>";
+                   if(in_array("area_abu", $select_cols) && isset($row['area_abu'])){
+                        echo "Area abu vulkanik ini terletak pada titik-titik koordinat berikut: " . $row['area_abu'] . "<br>";
                     }
 
-                    if(isset($row['PosisiGunung']) || isset($row['AreaAbu'])){
-                        $pos = isset($row['PosisiGunung']) ? $row['PosisiGunung'] : null;
-                        $area = isset($row['AreaAbu']) ? $row['AreaAbu'] : null;
+                    if(isset($row['posisi_gunung']) || isset($row['area_abu'])){
+                        $pos = isset($row['posisi_gunung']) ? $row['posisi_gunung'] : null;
+                        $area = isset($row['area_abu']) ? $row['area_abu'] : null;
 
-                        visualisasi_map($row['DataID'], $pos, $area);
+                        visualisasi_map($row['id'], $pos, $area);
                     }
 
                     echo "</div>";

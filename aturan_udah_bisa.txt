@@ -5,9 +5,14 @@ Tampilkam
 Tampilkan seluruh
 tampilkan + atribut
 Tampilkan nama gunung, pergerakan abu, etc..
+Tampilkan + atribut + date + to + date
+Tampilkan seluruh abu vulkanik dari 2026-01-10 sampai 2026-01-10
 
-aturan 2 
-Dimana
+aturan 2,3,4
+Dimana,kapan,berapa
+karena inputan hampir mirip dan hasil
 Dimana + atribut + kata sambung + tangal
 Dimana area abu pada tanggal 2026-01-06
+kapan waktu observasi pada tanggal 2026-01-10
+kapan waktu observasi
  
